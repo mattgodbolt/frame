@@ -7,10 +7,12 @@ include(pico_sdk_import.cmake)
 project(test_project)
 pico_sdk_init()
 
-add_executable(test main.cpp images.cpp images.hpp)
+add_executable(test main.cpp)
 #target_compile_options(test PRIVATE -Wall -Wextra -Werror)
+
+add_subdirectory(py)
 
 pico_enable_stdio_usb(test 1)
 pico_enable_stdio_uart(test 1)
 pico_add_extra_outputs(test)
-target_link_libraries(test pico_stdlib hardware_spi)
+target_link_libraries(test pico_stdlib hardware_spi images)
