@@ -7,7 +7,7 @@ include(pico_sdk_import.cmake)
 project(test_project)
 pico_sdk_init()
 
-add_executable(test main.cpp)
+add_executable(test main.cpp images.cpp images.hpp)
 #target_compile_options(test PRIVATE -Wall -Wextra -Werror)
 
 pico_enable_stdio_usb(test 1)

@@ -1,3 +1,5 @@
+#include "images.hpp"
+
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
 #include "pico/binary_info.h"
@@ -111,10 +113,12 @@ public:
   }
 
   void clear(uint colour) {
-    send_command(0x61, 0x02, 0x58, 0x01, 0xc0);
-    send_command(0x10);
-    for (auto i = 0; i < 600 * 448; ++i)
+    set_res();
+    for (auto i = 0; i < 600 * 448 / 2; ++i)
       send_data(colour | (colour << 4));
+    screen_refresh();
+  }
+  void screen_refresh() {
     send_command(0x04);
     busy_high();
     send_command(0x12);
@@ -122,6 +126,16 @@ public:
     send_command(0x02);
     busy_low();
     sleep_ms(500);
+  }
+  void set_res() {
+    send_command(0x61, 0x02, 0x58, 0x01, 0xc0);
+    send_command(0x10);
+  }
+  void image(const char *data) {
+    set_res();
+    for (auto i = 0; i < 600 * 448 / 2; ++i)
+      send_data(data[i]);
+    screen_refresh();
   }
 };
 
@@ -136,17 +150,27 @@ int main() {
   Screen screen;
   puts("init\n");
   screen.init();
-  puts("clear\n");
-  screen.clear(0x2);
-  puts("done\n");
 
   gpio_init(Pins::Led);
   gpio_set_dir(Pins::Led, GPIO_OUT);
-  while (1) {
+  int image_id = 0;
+  for (;;) {
     gpio_put(Pins::Led, false);
     sleep_ms(250);
     gpio_put(Pins::Led, true);
     puts("Hello World yo\n");
-    sleep_ms(1000);
+    puts("clear\n");
+    screen.clear(0x1);
+    puts("done\n");
+
+    puts("image: ");
+    puts(Image::Images[image_id].name);
+    puts("\n");
+    screen.image(Image::Images[image_id].data);
+    puts("done\n");
+    sleep_ms(30000);
+    image_id++;
+    if (image_id >= Image::NumImages)
+      image_id = 0;
   }
 }
