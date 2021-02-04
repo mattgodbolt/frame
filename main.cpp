@@ -122,16 +122,29 @@ public:
     // App manual says command 0x41 here, data 0
     send_command(0x40, 0x00);
     // App manual agrees
+    // This is "VCOM and Data interval settings"
+    // VBD[2:0] | DDX | CDI[3:0]
+    //          Vbd D CDI
+    //          | | | |  |
+    // 0x37 = 0b001 1 0111
+    // VBD of 001 is "white" (it's a colour, the "vertical back porch").
+    // DDX = 1 is LUT one "default" (b/w/g/b/r/y/o/X)
+    // CDI is "data interval", 7 is default of "10"
+    // timing diagram shows vsync/hsync timings, frame data is delayed by this
+    // many (hsyncs?) units.
     send_command(0x50, 0x37);
-    // App manual agrees
+    // App manual agrees, though 0x60 is not listed in the data sheet.
     send_command(0x60, 0x22);
     // App manual agrees
     set_res();
     // App manual agrees
     send_command(0xe3, 0xaa);
     // App manual says 0x82 and "flash vcom".
+    // Datasheet says "Vcom_DC setting" and mentions voltages, from -0.1V down
+    // to -4V. VCOM is "common voltage" which is presumably the power to the
+    // screen? Referenced in many display docs, and is usually negative.
     sleep_ms(100); // no mention of delays
-    // This is a repeat of an earlier command
+    // This is a repeat of the earlier VCOM and data interval settings
     send_command(0x50, 0x37);
   }
 
