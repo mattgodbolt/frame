@@ -146,31 +146,27 @@ int main() {
   stdio_init_all();
   sleep_ms(2000);
 
-  puts("ctor\n");
   Screen screen;
-  puts("init\n");
   screen.init();
 
   gpio_init(Pins::Led);
   gpio_set_dir(Pins::Led, GPIO_OUT);
   int image_id = 0;
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
   for (;;) {
     gpio_put(Pins::Led, false);
     sleep_ms(250);
     gpio_put(Pins::Led, true);
-    puts("Hello World yo\n");
-    puts("clear\n");
     screen.clear(0x1);
-    puts("done\n");
 
-    puts("image: ");
-    puts(Image::Images[image_id].name);
-    puts("\n");
+    printf("image: %s\n", Image::Images[image_id].name);
     screen.image(Image::Images[image_id].data);
-    puts("done\n");
-    sleep_ms(30000);
+    puts("done");
+    sleep_ms(5 * 60 * 1000);
     image_id++;
     if (image_id >= Image::NumImages)
       image_id = 0;
   }
+#pragma clang diagnostic pop
 }
