@@ -2,14 +2,14 @@ from PIL import Image
 import click
 
 PALETTE = [
-    (0, 0, 0),
-    (255, 255, 255),
-    (67, 138, 28),
-    (100, 64, 255),
-    (191, 0, 0),
-    (255, 243, 56),
-    (232, 126, 0),
-    (194, 164, 244)
+    (0x1f, 0x1f, 0x1f),  # black
+    (0xb6, 0xb6, 0xb6),  # white
+    (0x52, 0x5f, 0x2d),  # green
+    (0x32, 0x30, 0x50),  # blue (less sure on this rgb)
+    (0x67, 0x49, 0x49),  # red
+    (0xc4, 0xbb, 0x39),  # yellow (also not sure)
+    (0x9b, 0x6e, 0x26),  # orange (aka brown)
+    (0x75, 0x55, 0x68),  # not a real colour (pinkish?)
 ]
 
 WIDTH = 600
