@@ -5,6 +5,7 @@
 #include "pico/binary_info.h"
 #include "pico/stdlib.h"
 #include <cstdio>
+#include <utility>
 
 struct Pins {
   static constexpr auto Mosi = 19;
@@ -36,7 +37,7 @@ class Screen {
     cs_select();
     spi_write_blocking(Pins::SpiInst, &command, 1);
     cs_deselect();
-    send_data(data...);
+    send_data(std::forward<Args>(data)...);
   }
   void send_data1(uint8_t data) {
     gpio_put(Pins::Dc, true);
@@ -44,8 +45,16 @@ class Screen {
     spi_write_blocking(Pins::SpiInst, &data, 1);
     cs_deselect();
   }
-  template <typename... Args> void send_data(Args... data) {
-    int x[sizeof...(Args)] = {(send_data1(data), 0)...};
+  void send_data() {}
+  void send_data(const uint8_t *data, size_t length) {
+    gpio_put(Pins::Dc, true);
+    cs_select();
+    spi_write_blocking(Pins::SpiInst, data, length);
+    cs_deselect();
+  }
+  template <typename... Args> void send_data(uint8_t first, Args... rest) {
+    send_data1(first);
+    int x[sizeof...(Args)] = {(send_data1(rest), 0)...};
   }
 
   void busy_high() const {
@@ -62,6 +71,8 @@ class Screen {
   }
 
 public:
+  static constexpr auto Width = 600;
+  static constexpr auto Height = 448;
   Screen() {
     // Enable SPI at 1 MHz and connect to GPIOs
     spi_init(Pins::SpiInst, 2'000'000);
@@ -98,23 +109,35 @@ public:
   void init() {
     reset();
     busy_high();
+    // App manual agrees
     send_command(0x00, 0xef, 0x08);
+    // App manual says send 0x01 0x37 0x00 0x05 0x05.
     send_command(0x01, 0x37, 0x00, 0x23, 0x23);
+    // App manual agrees
     send_command(0x03, 0x00);
+    // App manual agrees
     send_command(0x06, 0xc7, 0xc7, 0x1d);
+    // App manual says "flash frame rate" here for data
     send_command(0x30, 0x3c);
+    // App manual says command 0x41 here, data 0
     send_command(0x40, 0x00);
+    // App manual agrees
     send_command(0x50, 0x37);
+    // App manual agrees
     send_command(0x60, 0x22);
-    send_command(0x61, 0x02, 0x58, 0x01, 0xc0);
+    // App manual agrees
+    set_res();
+    // App manual agrees
     send_command(0xe3, 0xaa);
-    sleep_ms(100);
+    // App manual says 0x82 and "flash vcom".
+    sleep_ms(100); // no mention of delays
+    // This is a repeat of an earlier command
     send_command(0x50, 0x37);
   }
 
   void clear(uint colour) {
-    set_res();
-    for (auto i = 0; i < 600 * 448 / 2; ++i)
+    send_command(0x10);
+    for (auto i = 0; i < Width * Height / 2; ++i)
       send_data(colour | (colour << 4));
     screen_refresh();
   }
@@ -125,16 +148,16 @@ public:
     busy_high();
     send_command(0x02);
     busy_low();
-    sleep_ms(500);
+    sleep_ms(500); // no mention of delays in manual
   }
   void set_res() {
+    // This is setting the screen resolution 0x258 = 600, 0x1c0 = 448.
     send_command(0x61, 0x02, 0x58, 0x01, 0xc0);
-    send_command(0x10);
   }
   void image(const char *data) {
     set_res();
-    for (auto i = 0; i < 600 * 448 / 2; ++i)
-      send_data(data[i]);
+    send_command(0x10, reinterpret_cast<const uint8_t *>(data),
+                 Width * Height / 2);
     screen_refresh();
   }
 };
@@ -158,7 +181,7 @@ int main() {
     gpio_put(Pins::Led, false);
     sleep_ms(250);
     gpio_put(Pins::Led, true);
-    screen.clear(0x1);
+    screen.clear(0x7);
 
     printf("image: %s\n", Image::Images[image_id].name);
     screen.image(Image::Images[image_id].data);

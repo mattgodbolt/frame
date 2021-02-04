@@ -9,7 +9,7 @@ PALETTE = [
     (0x67, 0x49, 0x49),  # red
     (0xc4, 0xbb, 0x39),  # yellow (also not sure)
     (0x9b, 0x6e, 0x26),  # orange (aka brown)
-    (0x75, 0x55, 0x68),  # not a real colour (pinkish?)
+    (0x75, 0x55, 0x68),  # not a real colour (pinkish? used for "clean")
 ]
 
 WIDTH = 600
