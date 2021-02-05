@@ -141,9 +141,6 @@ public:
     // Datasheet says "Vcom_DC setting" and mentions voltages, from -0.1V down
     // to -4V. VCOM is "common voltage" which is presumably the power to the
     // screen? Referenced in many display docs, and is usually negative.
-    sleep_ms(100); // no mention of delays
-    // This is a repeat of the earlier VCOM and data interval settings
-    send_command(0x50, 0x37);
   }
 
   void clear(uint colour) {
@@ -159,7 +156,6 @@ public:
     busy_high();
     send_command(0x02);
     busy_low();
-    sleep_ms(500); // no mention of delays in manual
   }
   void set_res() {
     // This is setting the screen resolution 0x258 = 600, 0x1c0 = 448.
