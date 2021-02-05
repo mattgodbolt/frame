@@ -20,19 +20,26 @@ struct Pins {
   static const inline auto SpiInst = spi0;
 };
 
-static inline void delay() { asm volatile("nop\nnop\nnop"); }
+constexpr uint8_t low_byte(size_t value) { return value & 0xff; }
+constexpr uint8_t high_byte(size_t value) { return (value >> 8) & 0xff; }
+[[gnu::noinline]] static void delayNs(size_t nanos) {
+  static constexpr auto nsPerNop = 5; // 7.5ish at 133MHz, but...paranoia?
+  auto numNops = (nanos + nsPerNop - 1) / nsPerNop;
+  for (auto i = 0; i < numNops; ++i)
+    asm volatile("nop");
+}
 
 class Screen {
   static inline void cs_select() {
-    delay();
+    delayNs(20);                    // hold time
     gpio_put(Pins::ChipSel, false); // Active low
-    delay();
+    delayNs(60);                    // setup time
   }
 
   static inline void cs_deselect() {
-    delay();
+    delayNs(65); // hold time
     gpio_put(Pins::ChipSel, true);
-    delay();
+    delayNs(40); // setup time
   }
   template <typename... Args> void send_command(uint8_t command, Args... data) {
     gpio_put(Pins::Dc, false);
@@ -54,18 +61,29 @@ class Screen {
     spi_write_blocking(Pins::SpiInst, data, length);
     cs_deselect();
   }
+  void send_repeated_data(uint8_t data, size_t length) {
+    gpio_put(Pins::Dc, true);
+    cs_select();
+    for (size_t i = 0; i < length; ++i)
+      spi_write_blocking(Pins::SpiInst, &data, 1);
+    cs_deselect();
+  }
   template <typename... Args> void send_data(uint8_t first, Args... rest) {
     send_data1(first);
     int x[sizeof...(Args)] = {(send_data1(rest), 0)...};
   }
 
   void busy_high() const {
+    delayNs(60); // unlikely to be needed (seen blank screen issues)
     while (!gpio_get(Pins::Busy))
-      delay();
+      /*spin*/;
+    delayNs(60); // unlikely to be needed (seen blank screen issues)
   }
   void busy_low() const {
+    delayNs(60); // unlikely to be needed (seen blank screen issues)
     while (gpio_get(Pins::Busy))
-      delay();
+      /*spin*/;
+    delayNs(60); // unlikely to be needed (seen blank screen issues)
   }
 
 public:
@@ -102,11 +120,11 @@ public:
     gpio_put(Pins::Reset, false);
     sleep_ms(2);
     gpio_put(Pins::Reset, true);
+    busy_high();
   }
 
   void init() {
     reset();
-    busy_high();
     // App manual agrees
     send_command(0x00, 0xef, 0x08);
     // App manual says send 0x01 0x37 0x00 0x05 0x05.
@@ -145,8 +163,7 @@ public:
 
   void clear(uint colour) {
     send_command(0x10);
-    for (auto i = 0; i < Width * Height / 2; ++i)
-      send_data(colour | (colour << 4));
+    send_repeated_data(colour | (colour << 4), Width * Height / 2);
     screen_refresh();
   }
   void screen_refresh() {
@@ -156,10 +173,13 @@ public:
     busy_high();
     send_command(0x02);
     busy_low();
+    sleep_ms(
+        200); // TODO: have seen "blank image" without it BUT SRSLY can't be!
   }
   void set_res() {
-    // This is setting the screen resolution 0x258 = 600, 0x1c0 = 448.
-    send_command(0x61, 0x02, 0x58, 0x01, 0xc0);
+    // This is setting the screen resolution.
+    send_command(0x61, high_byte(Width), low_byte(Width), high_byte(Height),
+                 low_byte(Height));
   }
   void image(const uint8_t *data) {
     set_res();
@@ -173,7 +193,6 @@ int main() {
   //  bi_decl(bi_1pin_with_name(Pins::Led, "On-board LED"));
 
   stdio_init_all();
-  sleep_ms(2000);
 
   Screen screen;
   screen.init();
@@ -185,9 +204,8 @@ int main() {
 #pragma ide diagnostic ignored "EndlessLoop"
   for (;;) {
     gpio_put(Pins::Led, false);
-    sleep_ms(250);
-    gpio_put(Pins::Led, true);
     screen.clear(0x7);
+    gpio_put(Pins::Led, true);
 
     const auto &image = Image::Images[image_id];
     printf("image: %s\n", image.name);
@@ -198,7 +216,8 @@ int main() {
     printf("decompress results: %d\n", result);
     screen.image(decom_buf.data());
     puts("done");
-    sleep_ms(5 * 60 * 1000);
+    sleep_ms(5 * 1000);
+    //    sleep_ms(5 * 60 * 1000);
     image_id++;
     if (image_id >= Image::NumImages)
       image_id = 0;
