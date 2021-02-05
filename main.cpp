@@ -60,16 +60,12 @@ class Screen {
   }
 
   void busy_high() const {
-    puts("busy high\n");
     while (!gpio_get(Pins::Busy))
       delay();
-    puts("busy high over\n");
   }
   void busy_low() const {
-    puts("busy low\n");
     while (gpio_get(Pins::Busy))
       delay();
-    puts("busy over\n");
   }
 
 public:
