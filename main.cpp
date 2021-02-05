@@ -1,9 +1,11 @@
 #include "images.hpp"
+#include "miniz.h"
 
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
 #include "pico/binary_info.h"
 #include "pico/stdlib.h"
+#include <array>
 #include <cstdio>
 #include <utility>
 
@@ -167,10 +169,9 @@ public:
     // This is setting the screen resolution 0x258 = 600, 0x1c0 = 448.
     send_command(0x61, 0x02, 0x58, 0x01, 0xc0);
   }
-  void image(const char *data) {
+  void image(const uint8_t *data) {
     set_res();
-    send_command(0x10, reinterpret_cast<const uint8_t *>(data),
-                 Width * Height / 2);
+    send_command(0x10, data, Width * Height / 2);
     screen_refresh();
   }
 };
@@ -196,8 +197,14 @@ int main() {
     gpio_put(Pins::Led, true);
     screen.clear(0x7);
 
-    printf("image: %s\n", Image::Images[image_id].name);
-    screen.image(Image::Images[image_id].data);
+    const auto &image = Image::Images[image_id];
+    printf("image: %s\n", image.name);
+    static std::array<uint8_t, Screen::Width * Screen::Height / 2> decom_buf;
+    auto dest_len = static_cast<mz_ulong>(decom_buf.size());
+    auto result = mz_uncompress(decom_buf.data(), &dest_len,
+                                image.compressed_data, image.compressed_size);
+    printf("decompress results: %d\n", result);
+    screen.image(decom_buf.data());
     puts("done");
     sleep_ms(5 * 60 * 1000);
     image_id++;
