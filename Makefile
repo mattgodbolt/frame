@@ -5,6 +5,7 @@ NINJA:=ninja
 OUTPUT_DIR:=cmake-build-deploy
 OUTPUT_UF2:=test.uf2
 RPI_DIR:=/media/$(USER)/RPI-RP2
+USB_MONITOR_PORT=/dev/ttyACM0
 
 .PHONY: help
 help:
@@ -23,5 +24,13 @@ await-pico:  ## wait for the pico to be ready for deploy (BOOTSEL)
 	@while [ ! -d $(RPI_DIR) ]; do sleep 0.25; done
 	@echo "done";
 
-deploy: build | await-pico
+deploy: build | await-pico  ## Build and deploy to a pico
 	cp $(OUTPUT_DIR)/$(OUTPUT_UF2) $(RPI_DIR)
+
+monitor:  ## Monitor a pico (using cu)
+	while true; do \
+		echo -n "Waiting for Raspberry Pi USB to arrive..."; \
+		while [ ! -c $(USB_MONITOR_PORT) ]; do sleep 0.25; done; \
+		echo "done"; \
+	    cu -l $(USB_MONITOR_PORT) -s 115200; \
+	done
