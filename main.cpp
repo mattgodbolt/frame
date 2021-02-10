@@ -4,7 +4,7 @@
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
 #include "pico/binary_info.h"
-#include "pico/stdlib.h"
+#include "pico/stdlib.h" // NOLINT(modernize-deprecated-headers)
 #include <array>
 #include <cstdio>
 #include <utility>
@@ -19,6 +19,11 @@ struct Pins {
   static constexpr auto Busy = 13;
   static const inline auto SpiInst = spi0;
 };
+bi_decl(bi_4pins_with_names(Pins::ChipSel, "E-ink chip select", Pins::Dc,
+                            "E-ink command", Pins::Reset, "E-ink reset",
+                            Pins::Busy, "E-ink busy"));
+bi_decl(bi_1pin_with_name(Pins::Led, "On-board LED"));
+bi_decl(bi_3pins_with_func(Pins::Mosi, Pins::Clock, Pins::Dc, GPIO_FUNC_SPI));
 
 constexpr uint8_t low_byte(size_t value) { return value & 0xff; }
 constexpr uint8_t high_byte(size_t value) { return (value >> 8) & 0xff; }
@@ -186,11 +191,14 @@ public:
     send_command(0x10, data, Width * Height / 2);
     screen_refresh();
   }
+  void sleep() { send_command(0x07, 0xa5); }
 };
 
 int main() {
-  //  bi_decl(bi_program_description("This is a test binary."));
-  //  bi_decl(bi_1pin_with_name(Pins::Led, "On-board LED"));
+  bi_decl(bi_program_name("photo"));
+  bi_decl(bi_program_description("Photo frame driver"));
+  bi_decl(bi_program_url("https://github.com/mattgodbolt/photo"));
+  bi_decl(bi_program_build_date_string(__TIME__));
 
   stdio_init_all();
 
@@ -203,9 +211,9 @@ int main() {
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
   for (;;) {
-    gpio_put(Pins::Led, false);
-    screen.clear(0x7);
     gpio_put(Pins::Led, true);
+    screen.clear(0x7);
+    gpio_put(Pins::Led, false);
 
     const auto &image = Image::Images[image_id];
     printf("image: %s\n", image.name);
@@ -216,8 +224,9 @@ int main() {
     printf("decompress results: %d\n", result);
     screen.image(decom_buf.data());
     puts("done");
-    sleep_ms(5 * 1000);
-    //    sleep_ms(5 * 60 * 1000);
+    screen.sleep();
+    sleep_ms(5 * 60 * 1000);
+    screen.init();
     image_id++;
     if (image_id >= Image::NumImages)
       image_id = 0;
