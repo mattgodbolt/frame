@@ -42,6 +42,7 @@ struct Image {{
   const char *name; 
   const uint8_t *compressed_data;
   size_t compressed_size;
+  bool portrait;
   static constexpr auto NumImages = {num_images};
   static const Image Images[NumImages];
 }};
@@ -51,9 +52,29 @@ struct Image {{
 
 """)
     images = []
+    frame_ratio = WIDTH / HEIGHT
     for index, image in enumerate(files):
         im = Image.open(image)
-        im = im.resize((WIDTH, HEIGHT))
+        portrait = im.height > im.width
+        if portrait:
+            im = im.transpose(Image.ROTATE_90)
+        image_ratio = im.width / im.height
+        if image_ratio > frame_ratio:
+            # Wider, so scale to height, then cut the middle bit out.
+            scale_height = HEIGHT
+            scale_width = int(scale_height * image_ratio)
+        else:
+            scale_width = WIDTH
+            scale_height = int(scale_width / image_ratio)
+        im = im.resize((scale_width, scale_height))
+        if scale_width > WIDTH:
+            lhs = (scale_width / 2) - (WIDTH / 2)
+            rhs = lhs + WIDTH
+            im = im.crop((lhs, 0, rhs, HEIGHT))
+        elif scale_height > HEIGHT:
+            top = (scale_height / 2) - (HEIGHT / 2)
+            bot = top + HEIGHT
+            im = im.crop((0, top, WIDTH, bot))
         palette_image = Image.new('P', im.size)
         palette_image.putpalette(list(sum(PALETTE, ())) * 32)
         palette_image.paste(im, (0, 0) + im.size)
@@ -66,7 +87,7 @@ struct Image {{
             f"({100 * len(compressed) / (WIDTH * HEIGHT / 2):.1f}%)")
 
         cpp_file.write(f"static const uint8_t image_data_{index}[] = {{\n  ")
-        images.append((image, len(compressed)))
+        images.append((image, len(compressed), portrait))
         for byte in compressed:
             cpp_file.write(f"0x{byte:02x}, ")
             num_on_line += 1
@@ -83,8 +104,10 @@ const Image Image::Images[NumImages] = {{
 
 """)
 
-    for index, (image, size) in enumerate(images):
-        cpp_file.write(f'{{ "{image}", image_data_{index}, {size}}},\n')
+    for index, (image, size, portrait) in enumerate(images):
+        cpp_file.write(
+            f'{{ "{image}", image_data_{index}, {size}, '
+            f'{"true" if portrait else "false"} }},\n')
 
     cpp_file.write("""
 };

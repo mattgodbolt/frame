@@ -3,6 +3,7 @@
 
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
+#include "hardware/sync.h"
 #include "pico/binary_info.h"
 #include "pico/stdlib.h" // NOLINT(modernize-deprecated-headers)
 #include <array>
@@ -17,6 +18,7 @@ struct Pins {
   static constexpr auto Dc = 15;
   static constexpr auto Reset = 14;
   static constexpr auto Busy = 13;
+  static constexpr auto Orientation = 12;
   static const inline auto SpiInst = spi0;
 };
 bi_decl(bi_4pins_with_names(Pins::ChipSel, "E-ink chip select", Pins::Dc,
@@ -194,6 +196,20 @@ public:
   void sleep() { send_command(0x07, 0xa5); }
 };
 
+volatile bool orientation_changed = false;
+
+void gpio_callback(uint gpio, uint32_t events) {
+  gpio_acknowledge_irq(gpio, events);
+  orientation_changed = true;
+  gpio_put(Pins::Led, true);
+  __sev();
+}
+
+static int64_t sev_callback(alarm_id_t, void *) {
+  __sev();
+  return 0;
+}
+
 int main() {
   bi_decl(bi_program_name("photo"));
   bi_decl(bi_program_description("Photo frame driver"));
@@ -207,7 +223,11 @@ int main() {
 
   gpio_init(Pins::Led);
   gpio_set_dir(Pins::Led, GPIO_OUT);
-  int image_id = 0;
+  gpio_init(Pins::Orientation);
+  gpio_set_dir(Pins::Orientation, GPIO_IN);
+  gpio_set_irq_enabled_with_callback(Pins::Orientation, 4 | 8, true,
+                                     gpio_callback);
+  size_t image_id = time_us_32() % Image::NumImages;
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
   for (;;) {
@@ -215,6 +235,15 @@ int main() {
     screen.clear(0x7);
     gpio_put(Pins::Led, false);
 
+    bool orientation = gpio_get(Pins::Orientation);
+    printf("orientation: %d\n", orientation);
+    for (auto offset = 0; offset < Image::NumImages; ++offset) {
+      if (Image::Images[image_id].portrait == orientation)
+        break;
+      image_id++;
+      if (image_id >= Image::NumImages)
+        image_id = 0;
+    }
     const auto &image = Image::Images[image_id];
     printf("image: %s\n", image.name);
     static std::array<uint8_t, Screen::Width * Screen::Height / 2> decom_buf;
@@ -225,7 +254,26 @@ int main() {
     screen.image(decom_buf.data());
     puts("done");
     screen.sleep();
-    sleep_ms(5 * 60 * 1000);
+
+    constexpr auto sleep_secs = 5 * 60;
+    const auto target_sleep_time =
+        make_timeout_time_us(sleep_secs * (1000ul * 1000ul));
+    orientation_changed = false;
+    auto looped_times = 0ul;
+    auto alarm_id =
+        add_alarm_at(target_sleep_time, sev_callback, nullptr, false);
+    if (alarm_id <= 0)
+      puts("Unable to get an alarm");
+    while (!time_reached(target_sleep_time) && !orientation_changed) {
+      __wfe();
+      looped_times++;
+    }
+    if (alarm_id > 0)
+      cancel_alarm(alarm_id);
+    printf("Slept %lu times\n", looped_times);
+    if (orientation_changed) {
+      printf("Orientation changed!\n");
+    }
     screen.init();
     image_id++;
     if (image_id >= Image::NumImages)

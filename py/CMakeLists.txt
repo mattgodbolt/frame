@@ -13,7 +13,7 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E touch venv.stamp
 )
 
-file(GLOB ALL_IMAGES CONFIGURE_DEPENDS "../images/*")
+file(GLOB ALL_IMAGES CONFIGURE_DEPENDS "../images/*.jpg")
 add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/images.cpp ${CMAKE_CURRENT_BINARY_DIR}/images.hpp
         DEPENDS venv.stamp conv.py ${ALL_IMAGES}
