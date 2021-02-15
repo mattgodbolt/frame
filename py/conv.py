@@ -1,28 +1,49 @@
+from pathlib import Path
+from typing import Tuple, List, cast
+
 from PIL import Image
+
 import click
 import zlib
 
-PALETTE = [
-    (0x1f, 0x1f, 0x1f),  # black
-    (0xb6, 0xb6, 0xb6),  # white
-    (0x52, 0x5f, 0x2d),  # green
-    (0x32, 0x30, 0x50),  # blue (less sure on this rgb)
-    (0x67, 0x49, 0x49),  # red
-    (0xc4, 0xbb, 0x39),  # yellow (also not sure)
-    (0x9b, 0x6e, 0x26),  # orange (aka brown)
-    (0x75, 0x55, 0x68),  # not a real colour (pinkish? used for "clean")
-]
-
+GAMMA = 1
 WIDTH = 600
 HEIGHT = 448
+
+RgbTriple = Tuple[int, int, int]
+
+
+def gamma(x: RgbTriple, gamma: float) -> RgbTriple:
+    return cast(RgbTriple, tuple(int((c / 255.) ** gamma * 255) for c in x))
+
+
+# Measured in poor daylight and artificial light, then adjusted match on the
+# screen vs the colours we see on the screen. Everything's still pretty yellowy
+# but I suspect the device's palette is the main culprit there.
+def create_palette() -> List[RgbTriple]:
+    raw = [
+        (0x18, 0x18, 0x18),  # black (artificially darkened a bit)
+        (0xb8, 0xb8, 0xb8),  # white (artificially lightened a bit)
+        (0x67, 0x86, 0x3f),  # green
+        (0x45, 0x3e, 0x4a),  # blue
+        (0x5c, 0x34, 0x35),  # red
+        (0x8d, 0x79, 0x44),  # yellow
+        (0x84, 0x64, 0x44),  # orange (aka brown)
+        (0x6f, 0x58, 0x7f),  # not a real colour (pinkish? used for "clean")
+    ]
+
+    return list(map(lambda x: gamma(x, GAMMA), raw))
+
+
+PALETTE = create_palette()
 
 
 def image_bytes(converted):
     result = []
     for y in range(0, HEIGHT):
         for x in range(0, WIDTH, 2):
-            p1 = converted.getpixel((x, y)) & 0xf
-            p2 = converted.getpixel((x + 1, y)) & 0xf
+            p1 = converted.getpixel((x, y))
+            p2 = converted.getpixel((x + 1, y))
             result.append((p1 << 4) | p2)
     return bytes(result)
 
@@ -30,8 +51,9 @@ def image_bytes(converted):
 @click.command()
 @click.option("--header", type=click.File('w'), required=True)
 @click.option("--cpp-file", type=click.File('w'), required=True)
+@click.option("--show/--no-show")
 @click.argument("files", type=click.Path(exists=True, dir_okay=False), nargs=-1)
-def main(header, cpp_file, files):
+def main(header, cpp_file, files, show):
     num_images = len(files)
     header.write(f"""#pragma once
 
@@ -78,7 +100,12 @@ struct Image {{
         palette_image = Image.new('P', im.size)
         palette_image.putpalette(list(sum(PALETTE, ())) * 32)
         palette_image.paste(im, (0, 0) + im.size)
-        converted = im.quantize(colors=8, palette=palette_image)
+        converted = im.quantize(
+            colors=len(PALETTE),
+            palette=palette_image,
+            dither=Image.FLOYDSTEINBERG)
+        if show:
+            converted.show()
         num_on_line = 0
         image_data = image_bytes(converted)
         compressed = zlib.compress(image_data, 9)
@@ -87,7 +114,7 @@ struct Image {{
             f"({100 * len(compressed) / (WIDTH * HEIGHT / 2):.1f}%)")
 
         cpp_file.write(f"static const uint8_t image_data_{index}[] = {{\n  ")
-        images.append((image, len(compressed), portrait))
+        images.append((Path(image).name, len(compressed), portrait))
         for byte in compressed:
             cpp_file.write(f"0x{byte:02x}, ")
             num_on_line += 1

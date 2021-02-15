@@ -169,8 +169,17 @@ public:
   }
 
   void clear(uint colour) {
+    set_res();
     send_command(0x10);
     send_repeated_data(colour | (colour << 4), Width * Height / 2);
+    screen_refresh();
+  }
+  void rainbow() {
+    set_res();
+    send_command(0x10);
+    for (auto band = 0; band < 8; ++band) {
+      send_repeated_data(band | (band << 4), Width * Height / 2 / 8);
+    }
     screen_refresh();
   }
   void screen_refresh() {
@@ -210,6 +219,15 @@ static int64_t sev_callback(alarm_id_t, void *) {
   return 0;
 }
 
+void show_all_colours(Screen &screen) {
+  printf("Clearing to erase...\n");
+  screen.clear(7);
+  printf("Rainbow...\n");
+  screen.rainbow();
+  printf("Sleeping...\n");
+  sleep_ms(2000);
+}
+
 int main() {
   bi_decl(bi_program_name("photo"));
   bi_decl(bi_program_description("Photo frame driver"));
@@ -227,6 +245,9 @@ int main() {
   gpio_set_dir(Pins::Orientation, GPIO_IN);
   gpio_set_irq_enabled_with_callback(Pins::Orientation, 4 | 8, true,
                                      gpio_callback);
+
+//  show_all_colours(screen);
+
   size_t image_id = time_us_32() % Image::NumImages;
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -236,6 +257,7 @@ int main() {
     gpio_put(Pins::Led, false);
 
     bool orientation = gpio_get(Pins::Orientation);
+    orientation_changed = false;
     printf("orientation: %d\n", orientation);
     for (auto offset = 0; offset < Image::NumImages; ++offset) {
       if (Image::Images[image_id].portrait == orientation)
@@ -258,7 +280,6 @@ int main() {
     constexpr auto sleep_secs = 5 * 60;
     const auto target_sleep_time =
         make_timeout_time_us(sleep_secs * (1000ul * 1000ul));
-    orientation_changed = false;
     auto looped_times = 0ul;
     auto alarm_id =
         add_alarm_at(target_sleep_time, sev_callback, nullptr, false);
