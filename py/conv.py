@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Tuple, List, cast
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 import click
 import zlib
@@ -76,7 +76,7 @@ struct Image {{
     images = []
     frame_ratio = WIDTH / HEIGHT
     for index, image in enumerate(files):
-        im = Image.open(image)
+        im = ImageOps.exif_transpose(Image.open(image))
         portrait = im.height > im.width
         if portrait:
             im = im.transpose(Image.ROTATE_90)
