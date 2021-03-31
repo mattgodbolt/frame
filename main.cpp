@@ -36,6 +36,19 @@ constexpr uint8_t high_byte(size_t value) { return (value >> 8) & 0xff; }
     asm volatile("nop");
 }
 
+template <typename... Args>
+void debug([[maybe_unused]] const char *format,
+           [[maybe_unused]] Args &&...args) {
+#ifndef NDEBUG
+  if constexpr (sizeof...(args) == 0) {
+    puts(format);
+  } else {
+    printf(format, std::forward<Args>(args)...);
+    puts("");
+  }
+#endif
+}
+
 class Screen {
   static inline void cs_select() {
     delayNs(20);                    // hold time
@@ -220,21 +233,23 @@ static int64_t sev_callback(alarm_id_t, void *) {
 }
 
 void show_all_colours(Screen &screen) {
-  printf("Clearing to erase...\n");
+  debug("Clearing to erase...");
   screen.clear(7);
-  printf("Rainbow...\n");
+  debug("Rainbow...");
   screen.rainbow();
-  printf("Sleeping...\n");
+  debug("Sleeping...");
   sleep_ms(2000);
 }
 
 int main() {
   bi_decl(bi_program_name("photo"));
   bi_decl(bi_program_description("Photo frame driver"));
-  bi_decl(bi_program_url("https://github.com/mattgodbolt/photo"));
+  bi_decl(bi_program_url("https://github.com/mattgodbolt/frame"));
   bi_decl(bi_program_build_date_string(__TIME__));
 
+#ifndef NDEBUG
   stdio_init_all();
+#endif
 
   Screen screen;
   screen.init();
@@ -246,7 +261,7 @@ int main() {
   gpio_set_irq_enabled_with_callback(Pins::Orientation, 4 | 8, true,
                                      gpio_callback);
 
-//  show_all_colours(screen);
+  //  show_all_colours(screen);
 
   size_t image_id = time_us_32() % Image::NumImages;
 #pragma clang diagnostic push
@@ -258,7 +273,7 @@ int main() {
 
     bool orientation = gpio_get(Pins::Orientation);
     orientation_changed = false;
-    printf("orientation: %d\n", orientation);
+    debug("orientation: %d", orientation);
     for (auto offset = 0; offset < Image::NumImages; ++offset) {
       if (Image::Images[image_id].portrait == orientation)
         break;
@@ -267,14 +282,14 @@ int main() {
         image_id = 0;
     }
     const auto &image = Image::Images[image_id];
-    printf("image: %s\n", image.name);
+    debug("image: %s", image.name);
     static std::array<uint8_t, Screen::Width * Screen::Height / 2> decom_buf;
     auto dest_len = static_cast<mz_ulong>(decom_buf.size());
     auto result = mz_uncompress(decom_buf.data(), &dest_len,
                                 image.compressed_data, image.compressed_size);
-    printf("decompress results: %d\n", result);
+    debug("decompress results: %d", result);
     screen.image(decom_buf.data());
-    puts("done");
+    debug("done");
     screen.sleep();
 
     constexpr auto sleep_secs = 5 * 60;
@@ -284,16 +299,16 @@ int main() {
     auto alarm_id =
         add_alarm_at(target_sleep_time, sev_callback, nullptr, false);
     if (alarm_id <= 0)
-      puts("Unable to get an alarm");
+      debug("Unable to get an alarm");
     while (!time_reached(target_sleep_time) && !orientation_changed) {
       __wfe();
       looped_times++;
     }
     if (alarm_id > 0)
       cancel_alarm(alarm_id);
-    printf("Slept %lu times\n", looped_times);
+    debug("Slept %lu times", looped_times);
     if (orientation_changed) {
-      printf("Orientation changed!\n");
+      debug("Orientation changed!");
     }
     screen.init();
     image_id++;
